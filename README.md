@@ -6,6 +6,8 @@
 This project is a [Salesforce](https://www.salesforce.com) SDK for the popular game engine [Unity 3d](https://unity3d.com/).<br/>
 The SDK is written in C# and interact with the Force.com REST APIs.
 
+This SDK is provided “as is“ without any warranty or support. Salesforce does not officially endorse it.
+
 It provides the following services:
 - OAuth authentication
 - Salesforce records query, insert, update, delete operations
