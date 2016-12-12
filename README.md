@@ -22,7 +22,7 @@ Copyright (C) 2012 Boomlagoon Ltd.
 
 **Coroutine extensions**
 
-As a conveniency, this projects includes an **optional** utility classes that provides Coroutines with supports for return values and exceptions.
+As a convenience, this project includes **optional** utility classes that provide Coroutines with supports for return values and exceptions.
 ```C#
 Coroutine<bool> routine = this.StartCoroutine<bool>(sfClient.login(sfdcUsername, sfdcPassword, sfdcPersonalSecurityToken));
 yield return routine.coroutine;
