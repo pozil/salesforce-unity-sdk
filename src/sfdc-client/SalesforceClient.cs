@@ -214,31 +214,37 @@ namespace SFDC
 			}
 		}
 
-		/*
+        /*
 		* @description Runs an Apex Remote Method
 		*
 		* @param method GET or POST
 		* @param apexClass RestResource URL Mapping
-		* @param queryString Query string
+		* @param body Optional request body
+        * @param queryString Optional query string
 		* @throws SalesforceApiException if query fails
 		*/
-		public IEnumerator runApex(string method, string apexClass, string queryString) {
+        public IEnumerator runApex(string httpMethod, string apexClass, string body, string queryString) {
 			assertUserIsLoggedIn();
 
-			// Configure query
-			string url = instanceUrl + "/services/apexrest/" + apexClass + "?" + queryString;
-			Dictionary<string, string> headers = initRequestHeaders(method);
-			WWW www = new WWW(url, null, headers);
+            // Configure query
+            string url = instanceUrl + "/services/apexrest/" + apexClass;
+            if (queryString != null && !"".Equals(queryString))
+                url += "?" + queryString;
+            byte[] bodyAsBytes = null;
+            if (body != null && !"".Equals(body))
+                bodyAsBytes = System.Text.Encoding.UTF8.GetBytes(body);
+            Dictionary<string, string> headers = initRequestHeaders(httpMethod);
+			WWW www = new WWW(url, bodyAsBytes, headers);
 
 			// Execute query & wait for result
 			yield return www;
 
 			// Check query result for errors
 			if (www.error == null) {
-				logHttpResponseSuccess(www, method);
+				logHttpResponseSuccess(www, httpMethod);
 				yield return www.text;
 			} else {
-				logHttpResponseError(www, method);
+				logHttpResponseError(www, httpMethod);
 				throw new SalesforceApiException("Salesforce runApex error: " + www.error.ToString());
 			}
 		}
@@ -353,24 +359,24 @@ namespace SFDC
 			}
 		}
 
-		private Dictionary<string, string> initRequestHeaders(String method) {
+		private Dictionary<string, string> initRequestHeaders(String httpMethod) {
 			Dictionary<string, string> headers = new Dictionary<string, string>();
 			headers["Authorization"] = "Bearer " + token;
 			headers["Content-Type"] = "application/json";
-			headers["Method"] = method;
+			headers["Method"] = httpMethod;
 			headers["X-PrettyPrint"] = "1";
 			return headers;
 		}
 
-		private void logHttpResponseSuccess(WWW www, string method)	{
+		private void logHttpResponseSuccess(WWW www, string httpMethod)	{
 			if (isDebugMode) {
-				Debug.Log("Salesforce HTTP request: " + method + " " + www.url);
+				Debug.Log("Salesforce HTTP request: " + httpMethod + " " + www.url);
 				Debug.Log("Response: " + www.text);
 			}
 		}
 
-		private void logHttpResponseError(WWW www, string method)	{
-			Debug.LogError("Salesforce HTTP request: "+ method +" " + www.url);
+		private void logHttpResponseError(WWW www, string httpMethod)	{
+			Debug.LogError("Salesforce HTTP request: "+ httpMethod +" " + www.url);
 			Debug.LogError(www.error);
 			Debug.LogError(www.text);
 		}
