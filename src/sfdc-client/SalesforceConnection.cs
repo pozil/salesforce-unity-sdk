@@ -5,31 +5,26 @@ using System.Text;
 
 namespace SFDC
 {
-    public class SalesforceConnection
-    {
+    public class SalesforceConnection {
         private string token;
         private string instanceUrl;
         private string apiVersion;
 
-        public SalesforceConnection(string token, string instanceUrl, string apiVersion)
-        {
+        public SalesforceConnection(string token, string instanceUrl, string apiVersion) {
             this.token = token;
             this.instanceUrl = instanceUrl;
             this.apiVersion = apiVersion;
         }
 
-        public string getToken()
-        {
+        public string getToken() {
             return token;
         }
 
-        public string getInstanceUrl()
-        {
+        public string getInstanceUrl() {
             return instanceUrl;
         }
 
-        public string getApiVersion()
-        {
+        public string getApiVersion() {
             return apiVersion;
         }
     }
