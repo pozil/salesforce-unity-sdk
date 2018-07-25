@@ -26,13 +26,25 @@ Copyright (C) 2012 Boomlagoon Ltd.
 
 As a convenience, this project includes **optional** utility classes that provide Coroutines with supports for return values and exceptions.
 ```C#
-Coroutine<bool> routine = this.StartCoroutine<bool>(sfClient.login(sfdcUsername, sfdcPassword, sfdcPersonalSecurityToken));
-yield return routine.coroutine;
+Coroutine<bool> loginRoutine = owner.StartCoroutine<bool>(
+  sfClient.login(SFDC_USERNAME, SFDC_PASSWORD)
+);
+yield return loginRoutine.coroutine;
 try {
-  isUserLogged = routine.getValue();
+  isUserLogged = loginRoutine.getValue();
+  Debug.Log("Salesforce login successful.");
+}
+catch (SalesforceConfigurationException e) {
+  Debug.Log("Salesforce login failed due to invalid auth configuration");
+  throw e;
+}
+catch (SalesforceAuthenticationException e) {
+  Debug.Log("Salesforce login failed due to invalid credentials");
+  throw e;
 }
 catch (SalesforceApiException e) {
-  Debug.Log("Salesforce login failed: "+ e.Message, e);
+  Debug.Log("Salesforce login failed");
+  throw e;
 }
 ```
 
