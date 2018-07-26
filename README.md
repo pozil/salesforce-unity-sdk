@@ -19,7 +19,7 @@ This SDK is provided “as is“ without any warranty or support. Salesforce doe
 ### Sign up for a Salesforce Org (optional)
 If you need a Salesforce Org, you can sign up for a free [Salesforce Developer Edition](https://developer.salesforce.com/signup) (DE) organization.
 
-#### Create a Connected App in Salesforce
+### Create a Connected App in Salesforce
 1. Log in to your Salesforce org.
 2. At the top right of the page, select the gear icon and then click **Setup**.
 3. From Setup, enter `App Manager` in the Quick Find and select **App Manager**.
