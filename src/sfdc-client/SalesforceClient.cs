@@ -1,21 +1,7 @@
 /*
 * Salesforce REST API wrapper for Unity 3d.
-*
-* Original code written by John Casimiro on 2014-01-30.
-*
-* Modified by Ammar Alammar.
-*
-* Modified by Bobby Tamburrino:
-* - removed PlayMaker dependencies
-* - added Chatter support
-* - added approval process handling
-*
-* Modified by Philippe Ozil:
-* - refactored configuration to separate app/user authentication config
-* - switched all request to IEnumerator for more async control
-* - added exceptions to handle errors
-* - removed response from client class to allow parallel processing
-* - added debug mode for improved tracing
+* v2.0 by Philippe Ozil
+* https://github.com/pozil/salesforce-unity-sdk
 */
 using UnityEngine;
 using System;
