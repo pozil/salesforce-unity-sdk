@@ -22,8 +22,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using Boomlagoon.JSON;
+using UnityEngine.Networking;
+using System.Reflection;
 
-namespace SFDC
+namespace Salesforce
 {
     public class SalesforceClient : MonoBehaviour {
 
@@ -61,7 +63,7 @@ namespace SFDC
         * @param password The user's Salesforce password
         *
         * @throws SalesforceConfigurationException if client is not properly configured
-        * @throws SalesforceAuthenticationException if authentication request fails due to invalid credetials
+        * @throws SalesforceAuthenticationException if authentication request fails due to invalid credentials
         * @throws SalesforceApiException if authentication request fails (possible reasons: network...)
         */
         public IEnumerator login(string username, string password) {
@@ -73,40 +75,40 @@ namespace SFDC
                 yield return true;
             }
 
-            // Configure query
+            // Configure request
             WWWForm form = new WWWForm();
             form.AddField("username", username);
             form.AddField("password", password);
             form.AddField("client_secret", consumerSecret);
             form.AddField("client_id", consumerKey);
             form.AddField("grant_type", "password");
-            WWW www = new WWW(oAuthEndpoint, form);
 
-            // Execute query & wait for result
-            yield return www;
-
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, "GET");
-                JSONObject obj = JSONObject.Parse(www.text);
-                string token = obj.GetString("access_token");
-                string instanceUrl = obj.GetString("instance_url");
-                connection = new SalesforceConnection(token, instanceUrl, apiVersion);
-                yield return true;
-            } else {
-                logHttpResponseError(www, "GET");
-                JSONObject errorDetails = JSONObject.Parse(www.text);
-                if (errorDetails != null) {
-                    string error = errorDetails.GetString("error");
-                    string errorDescription = errorDetails.GetString("error_description");
-                    if (error == "invalid_client_id" || error == "invalid_client")
-                        throw new SalesforceConfigurationException("Salesforce authentication error due to invalid configuration: " + errorDescription);
-                    else if (error == "invalid_grant")
-                        throw new SalesforceAuthenticationException("Salesforce authentication error due to invalid user credentials: " + errorDescription);
-                    else
-                        throw new SalesforceApiException("Salesforce authentication error: " + errorDescription);
+            // Send request & parse response
+            using (UnityWebRequest request = UnityWebRequest.Post(oAuthEndpoint, form)) {
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    JSONObject errorDetails = JSONObject.Parse(request.downloadHandler.text);
+                    if (errorDetails != null) {
+                        string error = errorDetails.GetString("error");
+                        string errorDescription = errorDetails.GetString("error_description");
+                        if (error == "invalid_client_id" || error == "invalid_client")
+                            throw new SalesforceConfigurationException("Salesforce authentication error due to invalid OAuth configuration: " + errorDescription);
+                        else if (error == "invalid_grant")
+                            throw new SalesforceAuthenticationException("Salesforce authentication error due to invalid user credentials: " + errorDescription);
+                        else
+                            throw new SalesforceApiException("Salesforce authentication error: " + errorDescription);
+                    }
+                    throw new SalesforceApiException("Salesforce authentication error: " + request.error);
                 }
-                throw new SalesforceApiException("Salesforce authentication error: " + www.error.ToString());
+                else {
+                    logResponseSuccess(request);
+                    JSONObject obj = JSONObject.Parse(request.downloadHandler.text);
+                    string token = obj.GetString("access_token");
+                    string instanceUrl = obj.GetString("instance_url");
+                    connection = new SalesforceConnection(token, instanceUrl, apiVersion);
+                    yield return true;
+                }
             }
         }
 
@@ -120,238 +122,215 @@ namespace SFDC
         /*
         * @description Executes a SOQL query against Salesforce
         *
-        * @param q The SOQL query to be executed
+        * @param query The SOQL query to be executed
+        * @return JSON string with query results
         * @throws SalesforceApiException if query fails
         */
-        public IEnumerator query(string q) {
+        public IEnumerator query(string query) {
             assertUserIsLoggedIn();
 
-            // Configure query
-            string url = connection.getInstanceUrl() + "/services/data/" + connection.getApiVersion() + "/query?q=" + WWW.EscapeURL(q);
-            Dictionary<string, string> headers = initRequestHeaders("GET");
-            WWW www = new WWW(url, null, headers);
-
-            // Execute query & wait for result
-            yield return www;
-
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, "GET");
-                yield return www.text;
-            } else {
-                logHttpResponseError(www, "GET");
-                throw new SalesforceApiException("Salesforce query error: "+ www.error.ToString());
+            string url = getDataServiceUrl() +"query?q="+ UnityWebRequest.EscapeURL(query);
+            using (UnityWebRequest request = getBaseRequest(url, "GET")) {
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    throw new SalesforceApiException("Salesforce query error: " + request.error);
+                }
+                else {
+                    logResponseSuccess(request);
+                    yield return request.downloadHandler.text;
+                }
             }
         }
 
         /*
-        * @description Inserts a record into Salesforce.
+        * @description Executes a SOQL query against Salesforce and returns records of a given type
         *
-        * @param sObjectName The object in salesforce(custom or standard) that you are
-        * trying to insert a record to.
-        * @param body The JSON for the data(fields and values) that will be inserted.
+        * @param query The SOQL query to be executed
+        * @return a list of records of the given type
         * @throws SalesforceApiException if query fails
         */
-        public IEnumerator insert(string sObjectName, string body) {
+        public IEnumerator query<T>(string query) where T : SalesforceRecord, new() {
             assertUserIsLoggedIn();
 
-            // Configure query
-            string url = connection.getInstanceUrl() + "/services/data/" + connection.getApiVersion() + "/sobjects/" + sObjectName;
-            Dictionary<string, string> headers = initRequestHeaders("POST");
-            WWW www = new WWW(url, System.Text.Encoding.UTF8.GetBytes(body), headers);
+            string url = getDataServiceUrl() + "query?q=" + UnityWebRequest.EscapeURL(query);
+            using (UnityWebRequest request = getBaseRequest(url, "GET")) {
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    throw new SalesforceApiException("Salesforce query error: " + request.error);
+                }
+                else {
+                    logResponseSuccess(request);
+                    JSONObject json = JSONObject.Parse(request.downloadHandler.text);
+                    JSONArray recordsJson = json.GetArray("records");
+                    yield return SalesforceRecord.parseFromJsonArray<T>(recordsJson);
+                }
+            }
+        }
 
-            // Execute query & wait for result
-            yield return www;
 
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, "POST");
-                yield return www.text;
-            } else {
-                logHttpResponseError(www, "POST");
-                throw new SalesforceApiException("Salesforce insert error: "+ www.error.ToString());
+        /*
+        * @description Inserts a Salesforce record.
+        *
+        * @param record The record
+        * @return the record with its new id
+        * @throws SalesforceApiException if request fails
+        */
+        public IEnumerator insert(SalesforceRecord record) {
+            assertUserIsLoggedIn();
+
+            JSONObject recordJson = record.toJson();
+            string url = getDataServiceUrl() + "sobjects/" + record.getSObjectName();
+
+            using (UnityWebRequest request = getBaseRequest(url, "POST")) {
+                request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(recordJson.ToString()));
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    throw new SalesforceApiException("Salesforce insert error: " + request.error);
+                }
+                else {
+                    logResponseSuccess(request);
+                    JSONObject jsonResponse = JSONObject.Parse(request.downloadHandler.text);
+                    record.id = jsonResponse.GetString("id");
+                    yield return record;
+                }
             }
         }
 
         /*
-        * @description Updates a record in salesforce.
+        * @description Updates a Salesforce record.
         *
-        * @param id The salesforce id of the record you are trying to update.
-        * @param sObjectName The sobject of the record you are trying to update.
-        * @param body The JSON for the data(fields and values) that will be updated.
-        * @throws SalesforceApiException if query fails
+        * @param record The record
+        * @return an empty string
+        * @throws SalesforceApiException if request fails
         */
-        public IEnumerator update(string id, string sObjectName, string body) {
+        public IEnumerator update(SalesforceRecord record) {
             assertUserIsLoggedIn();
 
-            // Configure query
-            string url = connection.getInstanceUrl() + "/services/data/" + connection.getApiVersion() + "/sobjects/" + sObjectName + "/" + id + "?_HttpMethod=PATCH";
-            Dictionary<string, string> headers = initRequestHeaders("POST");
-            WWW www = new WWW(url, System.Text.Encoding.UTF8.GetBytes(body), headers);
+            JSONObject recordJson = record.toJson();
+            recordJson.Remove("Id");
 
-            // Execute query & wait for result
-            yield return www;
-
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, "POST");
-                yield return www.text;
-            } else {
-                logHttpResponseError(www, "POST");
-                throw new SalesforceApiException("Salesforce update error: "+ www.error.ToString());
+            string url = getDataServiceUrl() + "sobjects/" + record.getSObjectName() + "/" + record.id;
+            using (UnityWebRequest request = getBaseRequest(url, "PATCH")) {
+                request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(recordJson.ToString()));
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    throw new SalesforceApiException("Salesforce update error: " + request.error);
+                }
+                else {
+                    logResponseSuccess(request);
+                    yield return request.downloadHandler.text;
+                }
             }
         }
 
         /*
-        * @description Deletes a record in salesforce.
+        * @description Deletes a Salesforce record.
         *
-        * @param id The salesforce id of the record you are trying to delete.
-        * @param sObjectName The sobject of the record you are trying to delete.
-        * @throws SalesforceApiException if query fails
+        * @param record The record
+        * @return an empty string
+        * @throws SalesforceApiException if request fails
         */
-        public IEnumerator delete(string id, string sObjectName) {
+        public IEnumerator delete(SalesforceRecord record) {
             assertUserIsLoggedIn();
 
-            // Configure query
-            string url = connection.getInstanceUrl() + "/services/data/" + connection.getApiVersion() + "/sobjects/" + sObjectName + "/" + id + "?_HttpMethod=DELETE";
-
-            Dictionary<string, string> headers = new Dictionary<string, string>();
-            headers["Authorization"] = "Bearer " + connection.getToken();
-            headers["Method"] = "POST";
-            headers["X-PrettyPrint"] = "1";
-            // need something in the body for DELETE to work for some reason
-            String body = "DELETE";
-            WWW www = new WWW(url, System.Text.Encoding.UTF8.GetBytes(body), headers);
-
-            // Execute query & wait for result
-            yield return www;
-
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, "POST");
-                yield return www.text;
-            } else {
-                logHttpResponseError(www, "POST");
-                throw new SalesforceApiException("Salesforce delete error: "+ www.error.ToString());
+            string url = getDataServiceUrl() + "sobjects/" + record.getSObjectName() + "/" + record.id;
+            using (UnityWebRequest request = getBaseRequest(url, "DELETE")) {
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    throw new SalesforceApiException("Salesforce delete error: " + request.error);
+                }
+                else {
+                    logResponseSuccess(request);
+                    yield return request.downloadHandler.text;
+                }
             }
         }
 
         /*
-        * @description Runs an Apex Remote Method
+        * @description Executes a custom Apex Method via a custom REST endpoint
+        * See docs: https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_rest_code_sample_basic.htm
         *
-        * @param method GET or POST
-        * @param apexClass RestResource URL Mapping
+        * @param httpMethod HTTP method: GET, POST, PATCH, PUT or DELETE
+        * @param restResource mapping for this REST Resource (see @RestResource class annotation in Apex code)
         * @param body Optional request body
         * @param queryString Optional query string
-        * @throws SalesforceApiException if query fails
+        * @throws SalesforceApiException if request fails
         */
-        public IEnumerator runApex(string httpMethod, string apexClass, string body, string queryString) {
+        public IEnumerator runApex(string httpMethod, string restResource, string body, string queryString) {
             assertUserIsLoggedIn();
 
-            // Configure query
-            string url = connection.getInstanceUrl() + "/services/apexrest/" + apexClass;
+            string url = connection.getInstanceUrl() +"/services/apexrest/"+ restResource;
             if (queryString != null && !"".Equals(queryString))
                 url += "?" + queryString;
-            byte[] bodyAsBytes = null;
-            if (body != null && !"".Equals(body))
-                bodyAsBytes = System.Text.Encoding.UTF8.GetBytes(body);
-            Dictionary<string, string> headers = initRequestHeaders(httpMethod);
-            WWW www = new WWW(url, bodyAsBytes, headers);
-
-            // Execute query & wait for result
-            yield return www;
-
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, httpMethod);
-                yield return www.text;
-            } else {
-                logHttpResponseError(www, httpMethod);
-                throw new SalesforceApiException("Salesforce runApex error: " + www.error.ToString());
+            
+            using (UnityWebRequest request = getBaseRequest(url, httpMethod)) {
+                if (body != null && !"".Equals(body)) {
+                    request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
+                }
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    throw new SalesforceApiException("Salesforce runApex error: " + request.error);
+                }
+                else {
+                    logResponseSuccess(request);
+                    yield return request.downloadHandler.text;
+                }
             }
         }
 
         /*
-        * @description Gets the Chatter Feed for the supplied object
+        * @description Gets the Chatter Feed for the supplied record
         *
         * @param id The Id of the object to get the Chatter Feed from
-        * @throws SalesforceApiException if query fails
+        * @throws SalesforceApiException if request fails
         */
-        public IEnumerator getChatterFeed(string id) {
+        public IEnumerator getRecordChatterFeed(string id) {
             assertUserIsLoggedIn();
 
-            // Configure query
-            string url = connection.getInstanceUrl() + "/services/data/" + connection.getApiVersion() + "/chatter/feeds/record/" + id + "/feed-elements";
-            Dictionary<string, string> headers = initRequestHeaders("POST");
-            WWW www = new WWW(url, null, headers);
-
-            // Execute query & wait for result
-            yield return www;
-
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, "POST");
-                yield return www.text;
-            } else {
-                logHttpResponseError(www, "POST");
-                throw new SalesforceApiException("Salesforce getChatterFeed error: " + www.error.ToString());
+            string url = getDataServiceUrl() +"chatter/feeds/record/" + id + "/feed-elements";
+            using (UnityWebRequest request = getBaseRequest(url, "GET")) {
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    throw new SalesforceApiException("Salesforce getChatterFeed error: " + request.error);
+                }
+                else {
+                    logResponseSuccess(request);
+                    yield return request.downloadHandler.text;
+                }
             }
         }
 
         /*
-        * @description Posts to Chatter
+        * @description Posts to a Chatter Feed
+        * See docs: https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/quickreference_post_feed_item.htm
         *
         * @param body JSON denoting what and where to post to Chatter
-        * @throws SalesforceApiException if query fails
+        * @throws SalesforceApiException if request fails
         */
         public IEnumerator postToChatter(string body) {
             assertUserIsLoggedIn();
 
-            // Configure query
-            string url = connection.getInstanceUrl() + "/services/data/" + connection.getApiVersion() + "/chatter/feed-elements";
-            Dictionary<string, string> headers = initRequestHeaders("POST");
-            WWW www = new WWW(url, System.Text.Encoding.UTF8.GetBytes(body), headers);
-
-            // Execute query & wait for result
-            yield return www;
-
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, "POST");
-                yield return www.text;
-            } else {
-                logHttpResponseError(www, "POST");
-                throw new SalesforceApiException("Salesforce postToChatter error: " + www.error.ToString());
+            string url = getDataServiceUrl() +"chatter/feed-elements";
+            using (UnityWebRequest request = getBaseRequest(url, "POST")) {
+                request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
+                yield return request.SendWebRequest();
+                if (request.isNetworkError || request.isHttpError) {
+                    logResponseError(request);
+                    throw new SalesforceApiException("Salesforce postToChatter error: " + request.error);
+                }
+                else {
+                    logResponseSuccess(request);
+                    yield return request.downloadHandler.text;
+                }
             }
         }
-
-        /*
-        * @description Either approves or rejects an Approval Process
-        *
-        * @param body JSON denoting what Approval Process and what action was taken against it
-        * @throws SalesforceApiException if query fails
-        */
-        public IEnumerator handleApprovalProcess(string body) {
-            assertUserIsLoggedIn();
-
-            // Configure query
-            string url = connection.getInstanceUrl() + "/services/data/" + connection.getApiVersion() + "/process/approvals";
-            Dictionary<string, string> headers = initRequestHeaders("POST");
-            WWW www = new WWW(url, System.Text.Encoding.UTF8.GetBytes(body), headers);
-
-            // Execute query & wait for result
-            yield return www;
-
-            // Check query result for errors
-            if (www.error == null) {
-                logHttpResponseSuccess(www, "POST");
-                yield return www.text;
-            } else {
-                logHttpResponseError(www, "POST");
-                throw new SalesforceApiException("Salesforce handleApprovalProcess error: " + www.error.ToString());
-            }
-        }
-
 
         private void assertConfigurationIsValid(string username, string password) {
             try {
@@ -376,30 +355,37 @@ namespace SFDC
 
         private void assertUserIsLoggedIn() {
             if (!isUserLoggedIn()) {
-                throw new SalesforceApiException("Cannot perform SFDC query: not logged in");
+                throw new SalesforceApiException("Cannot perform Salesforce request: not logged in");
             }
         }
 
-        private Dictionary<string, string> initRequestHeaders(String httpMethod) {
-            Dictionary<string, string> headers = new Dictionary<string, string>();
-            headers["Authorization"] = "Bearer " + connection.getToken();
-            headers["Content-Type"] = "application/json";
-            headers["Method"] = httpMethod;
-            headers["X-PrettyPrint"] = "1";
-            return headers;
+        private string getDataServiceUrl() {
+            return connection.getInstanceUrl() + "/services/data/" + connection.getApiVersion() + "/";
         }
 
-        private void logHttpResponseSuccess(WWW www, string httpMethod) {
+        private UnityWebRequest getBaseRequest(String url, String httpMethod) {
+            UnityWebRequest request = new UnityWebRequest(url);
+            request.method = httpMethod;
+            request.SetRequestHeader("Authorization", "Bearer " + connection.getToken());
+            request.SetRequestHeader("Content-Type", "application/json");
             if (isDebugMode) {
-                Debug.Log("Salesforce HTTP request: " + httpMethod + " " + www.url);
-                Debug.Log("Response: " + www.text);
+                request.SetRequestHeader("X-PrettyPrint", "1");
+            }
+            request.downloadHandler = new DownloadHandlerBuffer();
+            return request;
+        }
+
+        private void logResponseSuccess(UnityWebRequest request) {
+            if (isDebugMode) {
+                Debug.Log("Salesforce HTTP request: "+ request.method + " " + request.responseCode + " " + request.url);
+                Debug.Log(request.downloadHandler.text);
             }
         }
 
-        private void logHttpResponseError(WWW www, string httpMethod) {
-            Debug.LogError("Salesforce HTTP request: "+ httpMethod +" "+ www.url);
-            Debug.LogError(www.error);
-            Debug.LogError(www.text);
+        private void logResponseError(UnityWebRequest request) {
+            Debug.LogError("Salesforce HTTP request: "+ request.method +" "+ request.responseCode +" "+ request.url);
+            Debug.LogError(request.error);
+            Debug.LogError(request.downloadHandler.text);
         }
     }
 }

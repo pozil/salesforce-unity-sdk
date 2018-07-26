@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace SFDC
+namespace Salesforce
 {
     /**
      * This is a generic exception that can be throw when using SalesforceClient
