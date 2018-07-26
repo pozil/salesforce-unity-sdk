@@ -7,8 +7,8 @@ using Boomlagoon.JSON;
 [RequireComponent(typeof(SalesforceClient))]
 public class TestSalesforceClient : MonoBehaviour {
 
-    public string salesforceUsername = "admin@sdg17.org";
-    public string salesforcePassword = "5lUT!qQ$*XZ2";
+    public string salesforceUsername = "";
+    public string salesforcePassword = "";
 
     IEnumerator Start() {
         // Get Salesforce client component
