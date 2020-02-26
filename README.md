@@ -21,28 +21,29 @@ If you need a Salesforce Org, you can sign up for a free [Salesforce Developer E
 
 ### Create a Connected App in Salesforce
 1. Log in to your Salesforce org.
-2. At the top right of the page, select the gear icon and then click **Setup**.
-3. From Setup, enter `App Manager` in the Quick Find and select **App Manager**.
-4. Click **New Connected App**.
-5. Enter `Unity 3d API` as the **Connected App Name**
-6. Enter your **Contact Email**.
-7. Under **API (Enable OAuth Settings)**, check the **Enable OAuth Settings** checkbox.
-8. Enter `https://localhost/` as the **Callback URL**.
-9. Under **Selected OAuth Scope**, move **Access and manage your data (API)** to the Selected OAuth Scopes list.
-10. Click **Save**.
-11. From this screen, copy the connected app’s **Consumer Key** and **Consumer Secret** some place temporarily.
+1. At the top right of the page, select the gear icon and then click **Setup**.
+1. From Setup, enter `App Manager` in the Quick Find and select **App Manager**.
+1. Click **New Connected App**.
+1. Enter `Unity 3d API` as the **Connected App Name**
+1. Enter your **Contact Email**.
+1. Under **API (Enable OAuth Settings)**, check the **Enable OAuth Settings** checkbox.
+1. Enter `https://localhost/` as the **Callback URL**.
+1. Under **Selected OAuth Scope**, move **Access and manage your data (API)** to the Selected OAuth Scopes list.
+1. Click **Save**.
+1. From this screen, copy the connected app’s **Consumer Key** and **Consumer Secret** some place temporarily.
 
 ### Install the Salesforce Client in Unity
-1. Copy the content of the `src` directory into your Unity project.
-2. Add the `Salesforce Client` component to your scene.
-3. Configure the client with the **Consumer Key** and **Consumer Secret** you obtained earlier.
+1. Copy the `src` folder from the SDK to the `Assets` folder of your Unity project
+1. Create an empty `GameObject` and give it a descriptive name like `Salesforce client`
+1. Drag and drop the `SalesforceClient` script that's in `Assets/src/sfdc-client` on the new `GameObject`
+1. Configure the client script with the **Consumer Key** and **Consumer Secret** you obtained earlier.
 
 If you want to test the client, follow these extra instructions:
-1. Add the `Test Salesforce Client` component on the same object that contains the `Salesforce Client` component
-2. Configure the test component with your Salesforce credentials
-3. Start the game and watch the Unity console
+1. Add the `Assets/src/sample/TestSalesforceClient` script on the same object that contains the `SalesforceClient` script
+1. Configure the test script with your Salesforce credentials
+1. Start the game and watch the Unity console
 
-If you do not want to use the sample code, you can safely remove the `sample` directory.
+If you do not want to use the sample code, you can safely remove the `Assets/src/sample` directory.
 
 ## Documentation
 
